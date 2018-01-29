@@ -4,6 +4,11 @@ public class EntityLink {
     private KnowledgeBase kb;
     private String identifier;
 
+    public EntityLink(KnowledgeBase kb, String identifier) {
+        this.kb = kb;
+        this.identifier = identifier;
+    }
+
     public KnowledgeBase getKb() {
         return kb;
     }
