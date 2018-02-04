@@ -5,6 +5,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.UnsupportedEncodingException;
+import java.util.ArrayList;
+import java.util.List;
 
 @Service
 public class WikidataSPARQLClient {
@@ -26,6 +28,12 @@ public class WikidataSPARQLClient {
             "    ?article schema:inLanguage \"en\" .\n" +
             "    VALUES ?article {<%s>}\n" +
             "} ";
+    private static final String RETRIEVE_ENTITY_TYPES = " PREFIX wd: <http://www.wikidata.org/entity/>\n" +
+            "PREFIX wdt: <http://www.wikidata.org/prop/direct/>\n" +
+            "SELECT ?type WHERE {\n" +
+            "    <%s> wdt:P31 ?type\n" +
+            "}";
+
     @Value("${fel_server.wikidata_endpoint}")
     private String wikidataEndpoint;
 
@@ -47,5 +55,25 @@ public class WikidataSPARQLClient {
         }
 
         return wikidataURI;
+    }
+
+    public List<String> getEntityTypes(String entityURI) throws UnsupportedEncodingException {
+        Query query = QueryFactory.create(
+                String.format(RETRIEVE_ENTITY_TYPES, entityURI)
+        );
+
+        List<String> entityTypes = new ArrayList<>();
+
+        try (QueryExecution qExec = QueryExecutionFactory.sparqlService(wikidataEndpoint, query)) {
+            ResultSet resultSet = qExec.execSelect();
+            String type;
+
+            while (resultSet.hasNext()) {
+                type = resultSet.nextSolution().getResource("type").getURI();
+                entityTypes.add(type);
+            }
+        }
+
+        return entityTypes;
     }
 }

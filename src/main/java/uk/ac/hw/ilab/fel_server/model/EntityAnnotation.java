@@ -1,10 +1,10 @@
 package uk.ac.hw.ilab.fel_server.model;
 
-import org.apache.commons.lang3.tuple.Pair;
+import com.yahoo.semsearch.fastlinking.view.Span;
 
 public class EntityAnnotation implements Comparable<EntityAnnotation> {
     private EntityLink entityLink;
-    private Pair<Integer, Integer> span;
+    private Span span;
     private String entity;
     private double score;
 
@@ -20,11 +20,11 @@ public class EntityAnnotation implements Comparable<EntityAnnotation> {
         this.entityLink = entityLink;
     }
 
-    public Pair<Integer, Integer> getSpan() {
+    public Span getSpan() {
         return span;
     }
 
-    public void setSpan(Pair<Integer, Integer> span) {
+    public void setSpan(Span span) {
         this.span = span;
     }
 
@@ -47,7 +47,7 @@ public class EntityAnnotation implements Comparable<EntityAnnotation> {
 
     @Override
     public int compareTo(EntityAnnotation o) {
-        if (o.getEntity().equals(this.getEntity())) {
+        if (o.entityLink.equals(this.entityLink)) {
             return 0;
         }
 

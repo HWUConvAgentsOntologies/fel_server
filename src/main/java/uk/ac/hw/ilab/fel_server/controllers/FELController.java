@@ -6,6 +6,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 import uk.ac.hw.ilab.fel_server.exceptions.InvalidFELRequest;
+import uk.ac.hw.ilab.fel_server.model.LinkerRequest;
 import uk.ac.hw.ilab.fel_server.services.FELService;
 
 @RestController
@@ -17,11 +18,11 @@ public class FELController {
     }
 
     @RequestMapping(method = RequestMethod.POST)
-    public Object annotate(@RequestBody String text) {
-        if (text == null) {
+    public Object annotate(@RequestBody LinkerRequest request) {
+        if (request.getText() == null) {
             throw new InvalidFELRequest("[FEL-server]: text is null");
         }
 
-        return felService.getAnnotations(text);
+        return felService.getAnnotations(request);
     }
 }
