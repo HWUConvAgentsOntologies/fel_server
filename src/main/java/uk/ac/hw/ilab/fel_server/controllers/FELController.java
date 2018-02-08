@@ -23,6 +23,6 @@ public class FELController {
             throw new InvalidFELRequest("[FEL-server]: text is null");
         }
 
-        return felService.getAnnotations(request);
+        return felService.getAnnotations(request).asMap();
     }
 }

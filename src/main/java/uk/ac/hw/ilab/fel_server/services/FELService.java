@@ -24,10 +24,12 @@ import javax.annotation.PostConstruct;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.util.*;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 @Service
 public class FELService {
+    private static final Logger logger = Logger.getLogger(FELService.class.getName());
     private final StanfordNLPService nlpService;
     private final WikidataSPARQLClient wikidataSPARQLClient;
     @Value("${fel_server.hash_filename}")
@@ -49,15 +51,15 @@ public class FELService {
         this.fel = new FastEntityLinker(hash, new EmptyContext());
     }
 
-    public Set<EntityAnnotation> getAnnotations(LinkerRequest request) {
+    public Multimap<Span, EntityAnnotation> getAnnotations(LinkerRequest request) {
         Annotation annotatedText = this.nlpService.annotate(request.getText());
         Multimap<Span, EntityAnnotation> annotations = processAnnotations(
                 fel.getResults(request.getText(), candidatePerSpot),
                 annotatedText
         );
 
-        if (annotations == null)
-            return null;
+        logger.info(String.format("Retrieved annotations from FEL service for request %s", request));
+        logger.info(annotations.toString());
 
         List<String> types = request.getTypes();
 
@@ -68,7 +70,7 @@ public class FELService {
         if (types != null)
             annotations = applyTypesFilter(annotations, request.getTypes());
 
-        return selectBestCandidate(annotations);
+        return filterSubspans(annotations);
     }
 
     private Multimap<Span, EntityAnnotation> applyTypesFilter(Multimap<Span, EntityAnnotation> annotations, List<String> types) {
@@ -80,6 +82,55 @@ public class FELService {
                     annotations.get(s).stream()
                             .filter(e -> e.getEntityLink().getTypes().stream().anyMatch(types::contains))
                             .collect(Collectors.toSet()));
+        }
+
+        return refinedAnnotations;
+    }
+
+    private Multimap<Span, EntityAnnotation> filterSubspans(Multimap<Span, EntityAnnotation> annotations) {
+        Multimap<Span, EntityAnnotation> refinedAnnotations = HashMultimap.create();
+
+        int i = 0, j = 0;
+        for (Span s1 : annotations.keySet()) {
+            Span selectedSpan = s1;
+            for (Span s2 : annotations.keySet()) {
+                if (j > i) {
+                    if (s1.getStartOffset() == s2.getStartOffset() &&
+                            s1.getEndOffset() < s2.getEndOffset()) {
+                        selectedSpan = s2;
+                    }
+                }
+                j++;
+            }
+
+            refinedAnnotations.putAll(selectedSpan, annotations.get(selectedSpan));
+            i++;
+
+        }
+
+        return refinedAnnotations;
+    }
+
+    private Set<EntityAnnotation> filterSubspans(Set<EntityAnnotation> annotations) {
+        Set<EntityAnnotation> refinedAnnotations = new HashSet<>();
+
+        int i = 0, j = 0;
+        for (EntityAnnotation a1 : annotations) {
+            EntityAnnotation selectedAnnotation = a1;
+
+            for (EntityAnnotation a2 : annotations) {
+                if (j > i) {
+                    if (a1.getSpan().getStartOffset() == a2.getSpan().getStartOffset() &&
+                            a1.getSpan().getEndOffset() < a2.getSpan().getEndOffset()) {
+                        selectedAnnotation = a2;
+                    }
+                }
+                j++;
+            }
+
+            refinedAnnotations.add(selectedAnnotation);
+
+            i++;
         }
 
         return refinedAnnotations;
@@ -97,6 +148,9 @@ public class FELService {
                 refinedAnnotations.add(currSpanAnnotations.stream().max(Comparator.comparingDouble(EntityAnnotation::getScore)).get());
             }
         }
+
+        // filter out subspans if there are span of text that cover a bigger part of the text
+        refinedAnnotations = filterSubspans(refinedAnnotations);
 
         Double meanScore = refinedAnnotations.stream().collect(Collectors.averagingDouble(EntityAnnotation::getScore));
 

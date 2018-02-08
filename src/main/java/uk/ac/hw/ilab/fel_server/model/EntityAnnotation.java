@@ -69,4 +69,14 @@ public class EntityAnnotation implements Comparable<EntityAnnotation> {
 
         return Objects.hash(entity);
     }
+
+    @Override
+    public String toString() {
+        return "EntityAnnotation{" +
+                "entityLink=" + entityLink +
+                ", span=" + span +
+                ", entity='" + entity + '\'' +
+                ", score=" + score +
+                '}';
+    }
 }

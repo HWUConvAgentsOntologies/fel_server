@@ -51,4 +51,13 @@ public class EntityLink {
 
         return Objects.hash(kb, identifier);
     }
+
+    @Override
+    public String toString() {
+        return "EntityLink{" +
+                "kb=" + kb +
+                ", identifier='" + identifier + '\'' +
+                ", types=" + types +
+                '}';
+    }
 }
