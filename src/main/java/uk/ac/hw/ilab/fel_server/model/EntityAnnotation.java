@@ -2,6 +2,8 @@ package uk.ac.hw.ilab.fel_server.model;
 
 import com.yahoo.semsearch.fastlinking.view.Span;
 
+import java.util.Objects;
+
 public class EntityAnnotation implements Comparable<EntityAnnotation> {
     private EntityLink entityLink;
     private Span span;
@@ -52,5 +54,19 @@ public class EntityAnnotation implements Comparable<EntityAnnotation> {
         }
 
         return -Double.compare(this.score, o.score);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        EntityAnnotation that = (EntityAnnotation) o;
+        return Objects.equals(entity, that.entity);
+    }
+
+    @Override
+    public int hashCode() {
+
+        return Objects.hash(entity);
     }
 }

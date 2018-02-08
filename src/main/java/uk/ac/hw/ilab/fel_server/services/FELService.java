@@ -1,5 +1,6 @@
 package uk.ac.hw.ilab.fel_server.services;
 
+import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
 import com.yahoo.semsearch.fastlinking.FastEntityLinker;
 import com.yahoo.semsearch.fastlinking.hash.AbstractEntityHash;
@@ -48,18 +49,69 @@ public class FELService {
         this.fel = new FastEntityLinker(hash, new EmptyContext());
     }
 
-    public List<EntityAnnotation> getAnnotations(LinkerRequest request) {
+    public Set<EntityAnnotation> getAnnotations(LinkerRequest request) {
         Annotation annotatedText = this.nlpService.annotate(request.getText());
-        Multimap<Span, EntityScore> results = fel.getResults(request.getText(), candidatePerSpot);
-        return processAnnotations(results, annotatedText);
+        Multimap<Span, EntityAnnotation> annotations = processAnnotations(
+                fel.getResults(request.getText(), candidatePerSpot),
+                annotatedText
+        );
+
+        if (annotations == null)
+            return null;
+
+        List<String> types = request.getTypes();
+
+        // resolve context: additional type filters can be derived from it
+        if (request.getContext() != null)
+            types.addAll(applyContextFilter(annotations, request.getContext()));
+
+        if (types != null)
+            annotations = applyTypesFilter(annotations, request.getTypes());
+
+        return selectBestCandidate(annotations);
+    }
+
+    private Multimap<Span, EntityAnnotation> applyTypesFilter(Multimap<Span, EntityAnnotation> annotations, List<String> types) {
+        Multimap<Span, EntityAnnotation> refinedAnnotations = HashMultimap.create();
+
+        for (Span s : annotations.keySet()) {
+            refinedAnnotations.putAll(
+                    s,
+                    annotations.get(s).stream()
+                            .filter(e -> e.getEntityLink().getTypes().stream().anyMatch(types::contains))
+                            .collect(Collectors.toSet()));
+        }
+
+        return refinedAnnotations;
+    }
+
+    private Set<EntityAnnotation> selectBestCandidate(Multimap<Span, EntityAnnotation> annotations) {
+        Set<EntityAnnotation> refinedAnnotations = new HashSet<>();
+
+        for (Span span : annotations.keySet()) {
+            Collection<EntityAnnotation> currSpanAnnotations = annotations.get(span);
+
+            if (currSpanAnnotations.size() == 1) {
+                refinedAnnotations.add(currSpanAnnotations.iterator().next());
+            } else {
+                refinedAnnotations.add(currSpanAnnotations.stream().max(Comparator.comparingDouble(EntityAnnotation::getScore)).get());
+            }
+        }
+
+        Double meanScore = refinedAnnotations.stream().collect(Collectors.averagingDouble(EntityAnnotation::getScore));
+
+        return refinedAnnotations.stream().filter(e -> e.getScore() >= meanScore).collect(Collectors.toSet());
+    }
+
+    //TODO: retrieve related concept types according to the current annotations and context
+    private List<String> applyContextFilter(Multimap<Span, EntityAnnotation> annotations, Multimap<String, String> context) {
+        return null;
     }
 
 
-    private List<EntityAnnotation> processAnnotations(Multimap<Span, EntityScore> annotations,
-                                                      Annotation annotatedText) {
-        List<EntityAnnotation> refinedAnnotations = new ArrayList<>(), finalAnnotations = new ArrayList<>();
-        boolean[] uniqueLink = new boolean[annotations.keySet().size()];
-        int i = 0;
+    private Multimap<Span, EntityAnnotation> processAnnotations(Multimap<Span, EntityScore> annotations,
+                                                                Annotation annotatedText) {
+        Multimap<Span, EntityAnnotation> refinedAnnotations = HashMultimap.create();
 
         for (Span span : annotations.keySet()) {
 
@@ -74,37 +126,25 @@ public class FELService {
                 annotation.setSpan(span);
                 annotation.setEntity(hash.getEntityName(score.entity.id).toString());
                 annotation.setScore(score.score);
-
                 try {
                     EntityLink link = new EntityLink(KnowledgeBase.WIKIDATA, wikidataSPARQLClient.getWikidataURI(annotation.getEntity()));
                     annotation.setEntityLink(link);
                     link.setTypes(wikidataSPARQLClient.getEntityTypes(link.getIdentifier()));
                 } catch (UnsupportedEncodingException e) {
-                    System.err.println("Skipping Wikidata annotation due to invalid Wikipedia URL encoding!");
+                    System.err.println(String.format(
+                            "Skipping Wikidata annotation %s due to invalid Wikipedia URL encoding!",
+                            annotation.getEntity()
+                    ));
+
                 }
                 currEntityAnnotations.add(annotation);
 
             }
 
-            uniqueLink[i++] = currEntityAnnotations.size() == 1;
-            refinedAnnotations.add(
-                    currEntityAnnotations.stream().max(Comparator.comparingDouble(EntityAnnotation::getScore)).get()
-            );
+            refinedAnnotations.putAll(span, currEntityAnnotations);
         }
 
-        Double meanScore = refinedAnnotations.stream().collect(Collectors.averagingDouble(EntityAnnotation::getScore));
-
-        ListIterator<EntityAnnotation> iter = refinedAnnotations.listIterator();
-
-        while (iter.hasNext()) {
-            int index = iter.nextIndex();
-            EntityAnnotation annotation = iter.next();
-
-            if (uniqueLink[index] || annotation.getScore() >= meanScore)
-                finalAnnotations.add(annotation);
-        }
-
-        return finalAnnotations;
+        return refinedAnnotations;
     }
 
     private boolean skipAnnotation(Span span, Annotation annotatedText) {
@@ -116,7 +156,11 @@ public class FELService {
         String posTag = firstToken.get(CoreAnnotations.PartOfSpeechAnnotation.class);
 
         if (endPos - beginPos == 0) {
-            if (!posTag.equals("NN") && !posTag.equals("NNP") && !posTag.contains("VB")) {
+            if (!posTag.equals("NN") &&
+                    !posTag.equals("NNS") &&
+                    !posTag.equals("NNPS") &&
+                    !posTag.equals("NNP") &&
+                    !posTag.contains("VB")) {
                 // skip the current entity: it is not a noun phrase or a simple noun or a verb
                 return true;
             }
