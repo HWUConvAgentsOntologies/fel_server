@@ -90,13 +90,16 @@ public class FELService {
     private Multimap<Span, EntityAnnotation> filterSubspans(Multimap<Span, EntityAnnotation> annotations) {
         Multimap<Span, EntityAnnotation> refinedAnnotations = HashMultimap.create();
 
-        int i = 0, j = 0;
+        int i = 0, j;
         for (Span s1 : annotations.keySet()) {
             Span selectedSpan = s1;
+            j = 0;
             for (Span s2 : annotations.keySet()) {
                 if (j > i) {
                     if (s1.getStartOffset() == s2.getStartOffset() &&
-                            s1.getEndOffset() < s2.getEndOffset()) {
+                            s1.getEndOffset() < s2.getEndOffset() ||
+                            s1.getStartOffset() > s2.getStartOffset() &&
+                                    s1.getEndOffset() == s2.getEndOffset()) {
                         selectedSpan = s2;
                     }
                 }
