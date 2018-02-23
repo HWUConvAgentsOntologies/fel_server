@@ -1,12 +1,15 @@
 package uk.ac.hw.ilab.fel_server.model;
 
-import java.util.List;
+import com.google.common.collect.Multimap;
+import uk.ac.hw.ilab.fel_server.model.properties.WikidataProperties;
+
+import java.util.Collection;
 import java.util.Objects;
 
 public class EntityLink {
     private KnowledgeBase kb;
     private String identifier;
-    private List<String> types;
+    private Multimap<String, String> properties;
 
     public EntityLink(KnowledgeBase kb, String identifier) {
         this.kb = kb;
@@ -29,12 +32,25 @@ public class EntityLink {
         this.identifier = identifier;
     }
 
-    public List<String> getTypes() {
-        return types;
+    public Multimap<String, String> getProperties() {
+        return properties;
     }
 
-    public void setTypes(List<String> types) {
-        this.types = types;
+    public void setProperties(Multimap<String, String> properties) {
+        this.properties = properties;
+    }
+
+    public Collection<String> getValuesForProperty(String propertyURI) {
+        return this.properties.get(propertyURI);
+    }
+
+    public Collection<String> getTypes() {
+        switch (kb) {
+            case WIKIDATA:
+                return properties.get(WikidataProperties.ENTITY_TYPE);
+            default:
+                return null;
+        }
     }
 
     @Override
@@ -57,7 +73,7 @@ public class EntityLink {
         return "EntityLink{" +
                 "kb=" + kb +
                 ", identifier='" + identifier + '\'' +
-                ", types=" + types +
+                ", properties=" + properties +
                 '}';
     }
 }

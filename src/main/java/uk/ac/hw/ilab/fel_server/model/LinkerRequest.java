@@ -2,11 +2,9 @@ package uk.ac.hw.ilab.fel_server.model;
 
 import com.google.common.collect.Multimap;
 
-import java.util.List;
-
 public class LinkerRequest {
     private String text;
-    private List<String> types;
+    private Multimap<String, String> properties;
     private Multimap<String, String> context;
 
     public String getText() {
@@ -25,19 +23,19 @@ public class LinkerRequest {
         this.context = context;
     }
 
-    public List<String> getTypes() {
-        return types;
+    public Multimap<String, String> getProperties() {
+        return properties;
     }
 
-    public void setTypes(List<String> types) {
-        this.types = types;
+    public void setProperties(Multimap<String, String> properties) {
+        this.properties = properties;
     }
 
     @Override
     public String toString() {
         return "LinkerRequest{" +
                 "text='" + text + '\'' +
-                ", types=" + types +
+                ", properties= " + properties +
                 ", context=" + context +
                 '}';
     }

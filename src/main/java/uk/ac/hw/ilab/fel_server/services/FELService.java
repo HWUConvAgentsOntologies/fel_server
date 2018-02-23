@@ -19,6 +19,7 @@ import uk.ac.hw.ilab.fel_server.model.EntityAnnotation;
 import uk.ac.hw.ilab.fel_server.model.EntityLink;
 import uk.ac.hw.ilab.fel_server.model.KnowledgeBase;
 import uk.ac.hw.ilab.fel_server.model.LinkerRequest;
+import uk.ac.hw.ilab.fel_server.model.properties.WikidataProperties;
 
 import javax.annotation.PostConstruct;
 import java.io.IOException;
@@ -32,6 +33,7 @@ public class FELService {
     private static final Logger logger = Logger.getLogger(FELService.class.getName());
     private final StanfordNLPService nlpService;
     private final WikidataSPARQLClient wikidataSPARQLClient;
+    private List<String> entityProperties;
     @Value("${fel_server.hash_filename}")
     private String hashFilename;
     @Value("${fel_server.candidate_per_spot}")
@@ -43,12 +45,20 @@ public class FELService {
                       @Autowired StanfordNLPService nlpService) {
         this.wikidataSPARQLClient = wikidataSPARQLClient;
         this.nlpService = nlpService;
+
     }
 
     @PostConstruct
     public void init() throws IOException, ClassNotFoundException {
         this.hash = (QuasiSuccinctEntityHash) BinIO.loadObject(hashFilename);
         this.fel = new FastEntityLinker(hash, new EmptyContext());
+        initPropertyList();
+    }
+
+    private void initPropertyList() {
+        entityProperties = new ArrayList<>();
+        entityProperties.add(WikidataProperties.ENTITY_TYPE);
+        entityProperties.add(WikidataProperties.OCCUPATION);
     }
 
     public Multimap<Span, EntityAnnotation> getAnnotations(LinkerRequest request) {
@@ -61,14 +71,14 @@ public class FELService {
         logger.info(String.format("Retrieved annotations from FEL service for request %s", request));
         logger.info(annotations.toString());
 
-        List<String> types = request.getTypes();
+        Multimap<String, String> properties = request.getProperties();
 
         // resolve context: additional type filters can be derived from it
         if (request.getContext() != null)
-            types.addAll(applyContextFilter(annotations, request.getContext()));
+            properties.putAll(applyContextFilter(annotations, request.getContext()));
 
-        if (types != null)
-            annotations = applyTypesFilter(annotations, request.getTypes());
+        if (properties != null)
+            annotations = applyPropertiesFilter(annotations, properties);
 
         return filterSubspans(annotations);
     }
@@ -87,12 +97,50 @@ public class FELService {
         return refinedAnnotations;
     }
 
+    private Multimap<Span, EntityAnnotation> applyPropertiesFilter(
+            Multimap<Span, EntityAnnotation> annotations,
+            Multimap<String, String> propertiesFilter) {
+        Multimap<Span, EntityAnnotation> refinedAnnotations = HashMultimap.create();
+
+        for (Span s : annotations.keySet()) {
+            refinedAnnotations.putAll(
+                    s,
+                    annotations.get(s).stream()
+                            .filter(e -> satisfiesPropertyFilter(e, propertiesFilter))
+                            .collect(Collectors.toSet()));
+        }
+
+        return refinedAnnotations;
+    }
+
+    private boolean satisfiesPropertyFilter(EntityAnnotation entity, Multimap<String, String> propertiesFilter) {
+        boolean okFilter = false;
+        EntityLink link = entity.getEntityLink();
+        int i = 0;
+
+        // checks if all the properties are satisfied
+        for (String prop : propertiesFilter.keySet()) {
+            List<String> filterProp = new ArrayList<>(propertiesFilter.get(prop));
+            filterProp.retainAll(link.getValuesForProperty(prop));
+            if (i == 0) {
+                okFilter = !filterProp.isEmpty();
+            } else {
+                okFilter = okFilter && !filterProp.isEmpty();
+            }
+
+            i++;
+        }
+
+        return okFilter;
+
+    }
+
     private Multimap<Span, EntityAnnotation> filterSubspans(Multimap<Span, EntityAnnotation> annotations) {
         Multimap<Span, EntityAnnotation> refinedAnnotations = HashMultimap.create();
 
         int i = 0, j;
         for (Span s1 : annotations.keySet()) {
-            Span selectedSpan = s1;
+            Span selectedSpan = null;
             j = 0;
             for (Span s2 : annotations.keySet()) {
                 if (j > i) {
@@ -100,13 +148,31 @@ public class FELService {
                             s1.getEndOffset() < s2.getEndOffset() ||
                             s1.getStartOffset() > s2.getStartOffset() &&
                                     s1.getEndOffset() == s2.getEndOffset()) {
-                        selectedSpan = s2;
+                        Collection<EntityAnnotation> e1List = annotations.get(s1),
+                                e2List = annotations.get(s2);
+                        if (e1List.size() == 1 && e2List.size() == 1) {
+                            EntityAnnotation e1 = e1List.iterator().next(),
+                                    e2 = e2List.iterator().next();
+
+                            // just one entity annotation, select the one with the highest score
+                            if (e1.getScore() > e2.getScore()) {
+                                selectedSpan = s1;
+                            } else {
+                                selectedSpan = s2;
+                            }
+
+                        } else {
+                            // in any other case always prefer the largest span
+                            selectedSpan = s2;
+                        }
                     }
                 }
                 j++;
             }
 
-            refinedAnnotations.putAll(selectedSpan, annotations.get(selectedSpan));
+            if (selectedSpan != null) {
+                refinedAnnotations.putAll(selectedSpan, annotations.get(selectedSpan));
+            }
             i++;
 
         }
@@ -161,7 +227,7 @@ public class FELService {
     }
 
     //TODO: retrieve related concept types according to the current annotations and context
-    private List<String> applyContextFilter(Multimap<Span, EntityAnnotation> annotations, Multimap<String, String> context) {
+    private Multimap<String, String> applyContextFilter(Multimap<Span, EntityAnnotation> annotations, Multimap<String, String> context) {
         return null;
     }
 
@@ -186,7 +252,11 @@ public class FELService {
                 try {
                     EntityLink link = new EntityLink(KnowledgeBase.WIKIDATA, wikidataSPARQLClient.getWikidataURI(annotation.getEntity()));
                     annotation.setEntityLink(link);
-                    link.setTypes(wikidataSPARQLClient.getEntityTypes(link.getIdentifier()));
+                    Multimap<String, String> properties = wikidataSPARQLClient.getEntityProps(
+                            link.getIdentifier(),
+                            entityProperties
+                    );
+                    link.setProperties(properties);
                 } catch (UnsupportedEncodingException e) {
                     System.err.println(String.format(
                             "Skipping Wikidata annotation %s due to invalid Wikipedia URL encoding!",

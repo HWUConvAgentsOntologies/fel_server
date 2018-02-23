@@ -1,12 +1,16 @@
 package uk.ac.hw.ilab.fel_server.services;
 
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.Multimap;
 import org.apache.jena.query.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class WikidataSPARQLClient {
@@ -32,6 +36,13 @@ public class WikidataSPARQLClient {
             "PREFIX wdt: <http://www.wikidata.org/prop/direct/>\n" +
             "SELECT ?type WHERE {\n" +
             "    <%s> wdt:P31 ?type\n" +
+            "}";
+
+    private static final String RETRIEVE_ENTITY_PROPS = "PREFIX wd: <http://www.wikidata.org/entity/>\n" +
+            "PREFIX wdt: <http://www.wikidata.org/prop/direct/>\n" +
+            "SELECT ?p ?o WHERE {\n" +
+            "    <%s> ?p ?o\n" +
+            " VALUES ?p { %s }\n" +
             "}";
 
     @Value("${fel_server.wikidata_endpoint}")
@@ -75,5 +86,33 @@ public class WikidataSPARQLClient {
         }
 
         return entityTypes;
+    }
+
+    public Multimap<String, String> getEntityProps(String entityURI, Collection<String> properties) {
+        String propertiesList = String.join(" ", properties.stream().map(p -> String.format("<%s>", p)).collect(Collectors.toList()));
+        Query query = QueryFactory.create(
+                String.format(
+                        RETRIEVE_ENTITY_PROPS,
+                        entityURI,
+                        propertiesList
+                )
+        );
+
+        Multimap<String, String> entityProps = HashMultimap.create();
+
+        try (QueryExecution qExec = QueryExecutionFactory.sparqlService(wikidataEndpoint, query)) {
+            ResultSet resultSet = qExec.execSelect();
+
+            while (resultSet.hasNext()) {
+                QuerySolution querySolution = resultSet.nextSolution();
+
+                String prop = querySolution.getResource("p").getURI(),
+                        obj = querySolution.getResource("o").getURI();
+
+                entityProps.put(prop, obj);
+            }
+        }
+
+        return entityProps;
     }
 }
