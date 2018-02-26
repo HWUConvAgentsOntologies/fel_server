@@ -121,14 +121,16 @@ public class FELService {
         // checks if all the properties are satisfied
         for (String prop : propertiesFilter.keySet()) {
             List<String> filterProp = new ArrayList<>(propertiesFilter.get(prop));
-            filterProp.retainAll(link.getValuesForProperty(prop));
-            if (i == 0) {
-                okFilter = !filterProp.isEmpty();
-            } else {
-                okFilter = okFilter && !filterProp.isEmpty();
+            if (!filterProp.isEmpty() && !link.getValuesForProperty(prop).isEmpty()) {
+                filterProp.retainAll(link.getValuesForProperty(prop));
+                if (i == 0) {
+                    okFilter = !filterProp.isEmpty();
+                } else {
+                    okFilter = okFilter && !filterProp.isEmpty();
+                }
+                i++;
             }
 
-            i++;
         }
 
         return okFilter;
@@ -136,6 +138,9 @@ public class FELService {
     }
 
     private Multimap<Span, EntityAnnotation> filterSubspans(Multimap<Span, EntityAnnotation> annotations) {
+        if (annotations.size() == 1)
+            return annotations;
+
         Multimap<Span, EntityAnnotation> refinedAnnotations = HashMultimap.create();
 
         int i = 0, j;
