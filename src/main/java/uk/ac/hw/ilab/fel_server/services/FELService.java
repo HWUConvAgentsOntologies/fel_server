@@ -167,8 +167,19 @@ public class FELService {
                             }
 
                         } else {
-                            // in any other case always prefer the largest span
-                            selectedSpan = s2;
+                            // Take the span which has the candidate with the maximum score
+                            Double score1 = e1List.stream()
+                                    .max(Comparator.comparingDouble(EntityAnnotation::getScore))
+                                    .map(EntityAnnotation::getScore).get(),
+                                    score2 = e2List.stream()
+                                            .max(Comparator.comparingDouble(EntityAnnotation::getScore))
+                                            .map(EntityAnnotation::getScore).get();
+
+                            if (score1 > score2) {
+                                selectedSpan = s1;
+                            } else {
+                                selectedSpan = s2;
+                            }
                         }
                     }
                 }
