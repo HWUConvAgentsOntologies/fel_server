@@ -138,7 +138,7 @@ public class FELService {
     }
 
     private Multimap<Span, EntityAnnotation> filterSubspans(Multimap<Span, EntityAnnotation> annotations) {
-        if (annotations.size() == 1)
+        if (annotations.keySet().size() == 1)
             return annotations;
 
         Multimap<Span, EntityAnnotation> refinedAnnotations = HashMultimap.create();
