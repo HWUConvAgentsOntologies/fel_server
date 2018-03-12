@@ -142,55 +142,65 @@ public class FELService {
             return annotations;
 
         Multimap<Span, EntityAnnotation> refinedAnnotations = HashMultimap.create();
+        Set<Span> checkedSpans = new HashSet<>();
 
         int i = 0, j;
         for (Span s1 : annotations.keySet()) {
             Span selectedSpan = null;
             j = 0;
-            for (Span s2 : annotations.keySet()) {
-                if (j > i) {
-                    if (s1.getStartOffset() == s2.getStartOffset() &&
-                            s1.getEndOffset() < s2.getEndOffset() ||
-                            s1.getStartOffset() > s2.getStartOffset() &&
-                                    s1.getEndOffset() == s2.getEndOffset()) {
-                        Collection<EntityAnnotation> e1List = annotations.get(s1),
-                                e2List = annotations.get(s2);
-                        if (e1List.size() == 1 && e2List.size() == 1) {
-                            EntityAnnotation e1 = e1List.iterator().next(),
-                                    e2 = e2List.iterator().next();
+            if (!checkedSpans.contains(s1)) {
+                for (Span s2 : annotations.keySet()) {
+                    if (j > i) {
+                        if (s1.getStartOffset() == s2.getStartOffset() &&
+                                s1.getEndOffset() < s2.getEndOffset() ||
+                                s1.getStartOffset() > s2.getStartOffset() &&
+                                        s1.getEndOffset() == s2.getEndOffset()) {
+                            Collection<EntityAnnotation> e1List = annotations.get(s1),
+                                    e2List = annotations.get(s2);
+                            if (e1List.size() == 1 && e2List.size() == 1) {
+                                EntityAnnotation e1 = e1List.iterator().next(),
+                                        e2 = e2List.iterator().next();
 
-                            // just one entity annotation, select the one with the highest score
-                            if (e1.getScore() > e2.getScore()) {
-                                selectedSpan = s1;
+                                // just one entity annotation, select the one with the highest score
+                                if (e1.getScore() > e2.getScore()) {
+                                    selectedSpan = s1;
+                                    checkedSpans.add(s2);
+                                } else {
+                                    selectedSpan = s2;
+                                    checkedSpans.add(s1);
+                                }
+
                             } else {
-                                selectedSpan = s2;
-                            }
+                                // Take the span which has the candidate with the maximum score
+                                Double score1 = e1List.stream()
+                                        .max(Comparator.comparingDouble(EntityAnnotation::getScore))
+                                        .map(EntityAnnotation::getScore).get(),
+                                        score2 = e2List.stream()
+                                                .max(Comparator.comparingDouble(EntityAnnotation::getScore))
+                                                .map(EntityAnnotation::getScore).get();
 
-                        } else {
-                            // Take the span which has the candidate with the maximum score
-                            Double score1 = e1List.stream()
-                                    .max(Comparator.comparingDouble(EntityAnnotation::getScore))
-                                    .map(EntityAnnotation::getScore).get(),
-                                    score2 = e2List.stream()
-                                            .max(Comparator.comparingDouble(EntityAnnotation::getScore))
-                                            .map(EntityAnnotation::getScore).get();
-
-                            if (score1 > score2) {
-                                selectedSpan = s1;
-                            } else {
-                                selectedSpan = s2;
+                                if (score1 > score2) {
+                                    selectedSpan = s1;
+                                    checkedSpans.add(s2);
+                                } else {
+                                    selectedSpan = s2;
+                                    checkedSpans.add(s1);
+                                }
                             }
                         }
                     }
+                    j++;
                 }
-                j++;
-            }
 
-            if (selectedSpan != null) {
-                refinedAnnotations.putAll(selectedSpan, annotations.get(selectedSpan));
+                if (selectedSpan != null) {
+                    refinedAnnotations.putAll(selectedSpan, annotations.get(selectedSpan));
+                } else {
+                    if (!checkedSpans.contains(s1)) {
+                        refinedAnnotations.putAll(s1, annotations.get(s1));
+                    }
+                }
+                i++;
             }
-            i++;
-
         }
 
         return refinedAnnotations;
