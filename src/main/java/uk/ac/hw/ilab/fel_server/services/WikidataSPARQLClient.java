@@ -61,7 +61,7 @@ public class WikidataSPARQLClient {
     private String dbpediaEndpoint;
 
     public String getWikidataURI(String wikipediaId) throws UnsupportedEncodingException {
-        String wikipediaURI = String.format("http://en.wikipedia.org/wiki/%s", wikipediaId);
+        String wikipediaURI = String.format("https://en.wikipedia.org/wiki/%s", wikipediaId);
         wikipediaURI = java.net.URLDecoder.decode(wikipediaURI, "UTF-8");
         Query query = QueryFactory.create(
                 String.format(RETRIEVE_WIKIDATA_URI, wikipediaURI)
@@ -80,6 +80,8 @@ public class WikidataSPARQLClient {
         // unable to get the wikidata URI using the wikidata endpoint
         // try with DBpedia
         if (wikidataURI == null) {
+            // DBpedia reference to the Wikipedia page has http in the URL
+            wikipediaURI = wikipediaURI.replace("https", "http");
             System.out.println("Wikidata URI not found in the Wikidata endpoint\nTrying on DBpedia...");
             query = QueryFactory.create(
                     String.format(RETRIEVE_WIKIDATA_URI_FROM_DBPEDIA, wikipediaURI)
