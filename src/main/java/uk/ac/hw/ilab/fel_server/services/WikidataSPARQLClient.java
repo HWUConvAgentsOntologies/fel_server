@@ -32,6 +32,15 @@ public class WikidataSPARQLClient {
             "    ?article schema:inLanguage \"en\" .\n" +
             "    VALUES ?article {<%s>}\n" +
             "} ";
+    private static final String RETRIEVE_WIKIDATA_URI_FROM_DBPEDIA = "" +
+            "PREFIX owl: <http://www.w3.org/2002/07/owl#>\n" +
+            "PREFIX foaf: <http://xmlns.com/foaf/0.1/>\n" +
+            "SELECT ?wikidata_uri WHERE {\n" +
+            "   ?dbpedia_uri foaf:isPrimaryTopicOf <%s>;\n" +
+            "                 owl:sameAs ?wikidata_uri.\n" +
+            "    FILTER(REGEX(str(?wikidata_uri), \"^http://www.wikidata.org\"))\n" +
+            "}";
+
     private static final String RETRIEVE_ENTITY_TYPES = " PREFIX wd: <http://www.wikidata.org/entity/>\n" +
             "PREFIX wdt: <http://www.wikidata.org/prop/direct/>\n" +
             "SELECT ?type WHERE {\n" +
@@ -48,8 +57,11 @@ public class WikidataSPARQLClient {
     @Value("${fel_server.wikidata_endpoint}")
     private String wikidataEndpoint;
 
+    @Value("${fel_server.dbpedia_endpoint}")
+    private String dbpediaEndpoint;
+
     public String getWikidataURI(String wikipediaId) throws UnsupportedEncodingException {
-        String wikipediaURI = String.format("https://en.wikipedia.org/wiki/%s", wikipediaId);
+        String wikipediaURI = String.format("http://en.wikipedia.org/wiki/%s", wikipediaId);
         wikipediaURI = java.net.URLDecoder.decode(wikipediaURI, "UTF-8");
         Query query = QueryFactory.create(
                 String.format(RETRIEVE_WIKIDATA_URI, wikipediaURI)
@@ -63,6 +75,23 @@ public class WikidataSPARQLClient {
             while (resultSet.hasNext()) {
                 wikidataURI = resultSet.nextSolution().getResource("wikidata_uri").getURI();
             }
+        }
+
+        // unable to get the wikidata URI using the wikidata endpoint
+        // try with DBpedia
+        if (wikidataURI == null) {
+            System.out.println("Wikidata URI not found in the Wikidata endpoint\nTrying on DBpedia...");
+            query = QueryFactory.create(
+                    String.format(RETRIEVE_WIKIDATA_URI_FROM_DBPEDIA, wikipediaURI)
+            );
+            try (QueryExecution qExec = QueryExecutionFactory.sparqlService(dbpediaEndpoint, query)) {
+                ResultSet resultSet = qExec.execSelect();
+
+                while (resultSet.hasNext()) {
+                    wikidataURI = resultSet.nextSolution().getResource("wikidata_uri").getURI();
+                }
+            }
+
         }
 
         return wikidataURI;
