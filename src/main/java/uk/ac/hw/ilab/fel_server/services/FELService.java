@@ -276,13 +276,21 @@ public class FELService {
                 annotation.setEntity(hash.getEntityName(score.entity.id).toString());
                 annotation.setScore(score.score);
                 try {
-                    EntityLink link = new EntityLink(KnowledgeBase.WIKIDATA, wikidataSPARQLClient.getWikidataURI(annotation.getEntity()));
-                    annotation.setEntityLink(link);
-                    Multimap<String, String> properties = wikidataSPARQLClient.getEntityProps(
-                            link.getIdentifier(),
-                            entityProperties
-                    );
-                    link.setProperties(properties);
+                    String entityIdentifier = wikidataSPARQLClient.getWikidataURI(annotation.getEntity());
+
+                    if (entityIdentifier != null && !isDisambiguationPage(entityIdentifier)) {
+                        EntityLink link = new EntityLink(KnowledgeBase.WIKIDATA, entityIdentifier);
+                        annotation.setEntityLink(link);
+
+                        Multimap<String, String> properties = wikidataSPARQLClient.getEntityProps(
+                                link.getIdentifier(),
+                                entityProperties
+                        );
+                        link.setProperties(properties);
+                        currEntityAnnotations.add(annotation);
+                    } else {
+                        System.err.println(String.format("No valid identifier for entity %s", score.entity.id));
+                    }
                 } catch (UnsupportedEncodingException e) {
                     System.err.println(String.format(
                             "Skipping Wikidata annotation %s due to invalid Wikipedia URL encoding!",
@@ -290,7 +298,6 @@ public class FELService {
                     ));
 
                 }
-                currEntityAnnotations.add(annotation);
 
             }
 
@@ -298,6 +305,10 @@ public class FELService {
         }
 
         return refinedAnnotations;
+    }
+
+    private boolean isDisambiguationPage(String entityIdentifier) {
+        return entityIdentifier.endsWith(WikidataProperties.DISAMBIGUATION_PAGE);
     }
 
     private boolean skipAnnotation(Span span, Annotation annotatedText) {
