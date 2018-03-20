@@ -137,6 +137,39 @@ public class FELService {
 
     }
 
+    private boolean containSubString(Span entitySpan, Set<Span> checkedSpans) {
+        for (Span span : checkedSpans) {
+            Set<String> spanStrings = new HashSet<>(Arrays.asList(span.span.split(" "))),
+                    entityStrings = new HashSet<>(Arrays.asList(entitySpan.span.split(" ")));
+
+            if (setOverlap(entityStrings, spanStrings)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private boolean setOverlap(Set<String> set1, Set<String> set2) {
+        if (set1.size() < set2.size()) {
+            for (String s1 : set1) {
+                for (String s2 : set2) {
+                    if (s1.equals(s2))
+                        return true;
+                }
+            }
+        } else {
+            for (String s2 : set2) {
+                for (String s1 : set1) {
+                    if (s1.equals(s2))
+                        return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     private Multimap<Span, EntityAnnotation> filterSubspans(Multimap<Span, EntityAnnotation> annotations) {
         if (annotations.keySet().size() == 1)
             return annotations;
@@ -148,7 +181,7 @@ public class FELService {
         for (Span s1 : annotations.keySet()) {
             Span selectedSpan = null;
             j = 0;
-            if (!checkedSpans.contains(s1)) {
+            if (!checkedSpans.contains(s1) || !containSubString(s1, checkedSpans)) {
                 for (Span s2 : annotations.keySet()) {
                     if (j > i) {
                         if (s1.getStartOffset() == s2.getStartOffset() &&
@@ -164,11 +197,12 @@ public class FELService {
                                 // just one entity annotation, select the one with the highest score
                                 if (e1.getScore() > e2.getScore()) {
                                     selectedSpan = s1;
-                                    checkedSpans.add(s2);
                                 } else {
                                     selectedSpan = s2;
-                                    checkedSpans.add(s1);
                                 }
+
+                                checkedSpans.add(s1);
+                                checkedSpans.add(s2);
 
                             } else {
                                 // Take the span which has the candidate with the maximum score
@@ -181,11 +215,11 @@ public class FELService {
 
                                 if (score1 > score2) {
                                     selectedSpan = s1;
-                                    checkedSpans.add(s2);
                                 } else {
                                     selectedSpan = s2;
-                                    checkedSpans.add(s1);
                                 }
+                                checkedSpans.add(s1);
+                                checkedSpans.add(s2);
                             }
                         }
                     }
@@ -195,7 +229,7 @@ public class FELService {
                 if (selectedSpan != null) {
                     refinedAnnotations.putAll(selectedSpan, annotations.get(selectedSpan));
                 } else {
-                    if (!checkedSpans.contains(s1)) {
+                    if (!checkedSpans.contains(s1) && !containSubString(s1, checkedSpans)) {
                         refinedAnnotations.putAll(s1, annotations.get(s1));
                     }
                 }
@@ -308,7 +342,7 @@ public class FELService {
     }
 
     private boolean isDisambiguationPage(String entityIdentifier) {
-        return entityIdentifier.endsWith(WikidataProperties.DISAMBIGUATION_PAGE);
+        return wikidataSPARQLClient.isDisambiguationPage(entityIdentifier);
     }
 
     private boolean skipAnnotation(Span span, Annotation annotatedText) {

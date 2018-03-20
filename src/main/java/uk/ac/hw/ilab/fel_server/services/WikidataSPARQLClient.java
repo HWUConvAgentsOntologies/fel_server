@@ -47,6 +47,12 @@ public class WikidataSPARQLClient {
             "    <%s> wdt:P31 ?type\n" +
             "}";
 
+    private static final String IS_DISAMBIGUATION_PAGE = " PREFIX wd: <http://www.wikidata.org/entity/>\n" +
+            "PREFIX wdt: <http://www.wikidata.org/prop/direct/>\n" +
+            "ASK {\n" +
+            "    <%s> wdt:P31 wd:Q416016 \n" +
+            "}";
+
     private static final String RETRIEVE_ENTITY_PROPS = "PREFIX wd: <http://www.wikidata.org/entity/>\n" +
             "PREFIX wdt: <http://www.wikidata.org/prop/direct/>\n" +
             "SELECT ?p ?o WHERE {\n" +
@@ -117,6 +123,17 @@ public class WikidataSPARQLClient {
         }
 
         return entityTypes;
+    }
+
+    public boolean isDisambiguationPage(String entityURI) {
+        Query query = QueryFactory.create(String.format(IS_DISAMBIGUATION_PAGE, entityURI));
+
+        try (QueryExecution qExec = QueryExecutionFactory.sparqlService(wikidataEndpoint, query)) {
+            return qExec.execAsk();
+
+        } catch (Exception ex) {
+            return false;
+        }
     }
 
     public Multimap<String, String> getEntityProps(String entityURI, Collection<String> properties) {
