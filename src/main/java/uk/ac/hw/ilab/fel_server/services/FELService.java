@@ -215,8 +215,14 @@ public class FELService {
 
                                 if (score1 > score2) {
                                     selectedSpan = s1;
+                                    if (refinedAnnotations.containsKey(s2)) {
+                                        refinedAnnotations.removeAll(s2);
+                                    }
                                 } else {
                                     selectedSpan = s2;
+                                    if (refinedAnnotations.containsKey(s1)) {
+                                        refinedAnnotations.removeAll(s1);
+                                    }
                                 }
                                 checkedSpans.add(s1);
                                 checkedSpans.add(s2);
