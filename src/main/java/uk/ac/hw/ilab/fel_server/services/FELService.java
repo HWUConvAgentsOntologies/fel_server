@@ -36,8 +36,12 @@ public class FELService {
     private List<String> entityProperties;
     @Value("${fel_server.hash_filename}")
     private String hashFilename;
-    @Value("${fel_server.candidate_per_spot}")
+    @Value("#{new Integer('${fel_server.candidate_per_spot}')}")
     private Integer candidatePerSpot;
+    @Value("#{new Double('${fel_server.annotation_score}')}")
+    private Double annotationScore;
+    @Value("#{new Double('${fel_server.candidate_score}')}")
+    private Double candidateScore;
     private FastEntityLinker fel;
     private AbstractEntityHash hash;
 
@@ -71,43 +75,45 @@ public class FELService {
         logger.info(String.format("Retrieved annotations from FEL service for request %s", request));
         logger.info(annotations.toString());
 
-        Multimap<String, String> properties = request.getProperties();
+        Multimap<String, String> properties = request.getProperties(),
+                profanityFilter = request.getProfanity();
 
         // resolve context: additional type filters can be derived from it
         if (request.getContext() != null)
             properties.putAll(applyContextFilter(annotations, request.getContext()));
 
         if (properties != null)
-            annotations = applyPropertiesFilter(annotations, properties);
+            annotations = applyPropertiesFilter(annotations, properties, false);
 
-        return filterSubspans(annotations);
-    }
+        annotations = filterSubspans(annotations);
 
-    private Multimap<Span, EntityAnnotation> applyTypesFilter(Multimap<Span, EntityAnnotation> annotations, List<String> types) {
-        Multimap<Span, EntityAnnotation> refinedAnnotations = HashMultimap.create();
+        if (profanityFilter != null)
+            // reversed=true -> discard all the annotations that matches the profanity filter
+            annotations = applyPropertiesFilter(annotations, profanityFilter, true);
 
-        for (Span s : annotations.keySet()) {
-            refinedAnnotations.putAll(
-                    s,
-                    annotations.get(s).stream()
-                            .filter(e -> e.getEntityLink().getTypes().stream().anyMatch(types::contains))
-                            .collect(Collectors.toSet()));
-        }
-
-        return refinedAnnotations;
+        return annotations;
     }
 
     private Multimap<Span, EntityAnnotation> applyPropertiesFilter(
             Multimap<Span, EntityAnnotation> annotations,
-            Multimap<String, String> propertiesFilter) {
+            Multimap<String, String> propertiesFilter,
+            boolean reversed) {
         Multimap<Span, EntityAnnotation> refinedAnnotations = HashMultimap.create();
 
         for (Span s : annotations.keySet()) {
-            refinedAnnotations.putAll(
-                    s,
-                    annotations.get(s).stream()
-                            .filter(e -> satisfiesPropertyFilter(e, propertiesFilter))
-                            .collect(Collectors.toSet()));
+            if (reversed) {
+                refinedAnnotations.putAll(
+                        s,
+                        annotations.get(s).stream()
+                                .filter(e -> !satisfiesPropertyFilter(e, propertiesFilter))
+                                .collect(Collectors.toSet()));
+            } else {
+                refinedAnnotations.putAll(
+                        s,
+                        annotations.get(s).stream()
+                                .filter(e -> satisfiesPropertyFilter(e, propertiesFilter))
+                                .collect(Collectors.toSet()));
+            }
         }
 
         return refinedAnnotations;
@@ -126,7 +132,7 @@ public class FELService {
                 if (i == 0) {
                     okFilter = !filterProp.isEmpty();
                 } else {
-                    okFilter = okFilter && !filterProp.isEmpty();
+                    okFilter = okFilter || !filterProp.isEmpty();
                 }
                 i++;
             }
@@ -308,9 +314,16 @@ public class FELService {
                 continue;
             }
 
+            // if the maximum for the current annotation is lower than the threshold skip it
+            if (annotations.get(span).stream().max(Comparator.comparingDouble(i -> i.score)).get().score <= annotationScore)
+                continue;
+
             Set<EntityAnnotation> currEntityAnnotations = new HashSet<>();
 
             for (EntityScore score : annotations.get(span)) {
+                if (score.score <= candidateScore)
+                    continue;
+
                 EntityAnnotation annotation = new EntityAnnotation();
                 annotation.setSpan(span);
                 annotation.setEntity(hash.getEntityName(score.entity.id).toString());
