@@ -7,6 +7,13 @@ public class LinkerRequest {
     private Multimap<String, String> properties;
     private Multimap<String, String> context;
     private Multimap<String, String> profanity;
+    private Double annotationScore;
+    private Double candidateScore;
+
+    public LinkerRequest() {
+        annotationScore = null;
+        candidateScore = null;
+    }
 
     public String getText() {
         return text;
@@ -40,13 +47,31 @@ public class LinkerRequest {
         this.profanity = profanity;
     }
 
+    public Double getAnnotationScore() {
+        return annotationScore;
+    }
+
+    public void setAnnotationScore(Double annotationScore) {
+        this.annotationScore = annotationScore;
+    }
+
+    public Double getCandidateScore() {
+        return candidateScore;
+    }
+
+    public void setCandidateScore(Double candidateScore) {
+        this.candidateScore = candidateScore;
+    }
+
     @Override
     public String toString() {
         return "LinkerRequest{" +
                 "text='" + text + '\'' +
-                ", properties= " + properties +
+                ", properties=" + properties +
                 ", context=" + context +
                 ", profanity=" + profanity +
+                ", annotationScore=" + annotationScore +
+                ", candidateScore=" + candidateScore +
                 '}';
     }
 }

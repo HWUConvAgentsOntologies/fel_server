@@ -39,9 +39,9 @@ public class FELService {
     @Value("#{new Integer('${fel_server.candidate_per_spot}')}")
     private Integer candidatePerSpot;
     @Value("#{new Double('${fel_server.annotation_score}')}")
-    private Double annotationScore;
+    private Double ANNOTATION_SCORE;
     @Value("#{new Double('${fel_server.candidate_score}')}")
-    private Double candidateScore;
+    private Double CANDIDATE_SCORE;
     private FastEntityLinker fel;
     private AbstractEntityHash hash;
 
@@ -67,9 +67,22 @@ public class FELService {
 
     public Multimap<Span, EntityAnnotation> getAnnotations(LinkerRequest request) {
         Annotation annotatedText = this.nlpService.annotate(request.getText());
+        // use the threshold values specified and override the default ones
+        Double annotationScore = request.getAnnotationScore(), candidateScore = request.getCandidateScore();
+
+        if (annotationScore == null) {
+            annotationScore = ANNOTATION_SCORE;
+        }
+
+        if (candidateScore == null) {
+            candidateScore = CANDIDATE_SCORE;
+        }
+
         Multimap<Span, EntityAnnotation> annotations = processAnnotations(
                 fel.getResults(request.getText(), candidatePerSpot),
-                annotatedText
+                annotatedText,
+                annotationScore,
+                candidateScore
         );
 
         logger.info(String.format("Retrieved annotations from FEL service for request %s", request));
@@ -123,6 +136,10 @@ public class FELService {
         boolean okFilter = false;
         EntityLink link = entity.getEntityLink();
         int i = 0;
+
+        // The entity automatically passes the filter
+        if (propertiesFilter.isEmpty())
+            return true;
 
         // checks if all the properties are satisfied
         for (String prop : propertiesFilter.keySet()) {
@@ -305,7 +322,9 @@ public class FELService {
 
 
     private Multimap<Span, EntityAnnotation> processAnnotations(Multimap<Span, EntityScore> annotations,
-                                                                Annotation annotatedText) {
+                                                                Annotation annotatedText,
+                                                                Double annotationScore,
+                                                                Double candidateScore) {
         Multimap<Span, EntityAnnotation> refinedAnnotations = HashMultimap.create();
 
         for (Span span : annotations.keySet()) {
